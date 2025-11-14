@@ -8,12 +8,14 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
+import structlog
 
 from ...storage.database import get_db_session
 from ...storage.redis_cache import get_market_cache, MarketDataCache
 from ...core.data_aggregator import get_data_aggregator
 from ...utils.exceptions import ExchangeConnectionError, ValidationError
 
+logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 
@@ -225,6 +227,26 @@ async def get_spot_klines(
         raise HTTPException(status_code=500, detail=f"获取现货K线数据失败: {str(e)}")
 
 
+# 资金费率响应模型
+class FundingRateResponse(BaseModel):
+    """资金费率响应模型"""
+    symbol: str
+    funding_rate: float
+    next_funding_time: datetime
+    exchange: str
+    timestamp: datetime
+
+
+# 持仓量响应模型
+class OpenInterestResponse(BaseModel):
+    """持仓量响应模型"""
+    symbol: str
+    open_interest: float
+    open_interest_value: float
+    exchange: str
+    timestamp: datetime
+
+
 # 合约市场数据API
 @router.get("/futures/ticker", response_model=MarketDataResponse)
 async def get_futures_ticker(
@@ -233,9 +255,37 @@ async def get_futures_ticker(
 ):
     """获取期货市场价格信息"""
     try:
-        # TODO: 实现期货价格获取逻辑
-        raise HTTPException(status_code=501, detail="期货市场数据API正在实现中")
+        # 获取数据聚合器
+        data_aggregator = await get_data_aggregator()
         
+        # 使用期货数据聚合器获取期货价格数据
+        futures_data = await data_aggregator.futures_aggregator.get_futures_market_data(exchange, symbol)
+        
+        if futures_data is None:
+            raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的期货市场数据")
+        
+        # 转换为API响应格式
+        return MarketDataResponse(
+            symbol=futures_data.symbol,
+            current_price=float(futures_data.current_price),
+            previous_close=float(futures_data.previous_close),
+            high_24h=float(futures_data.high_24h),
+            low_24h=float(futures_data.low_24h),
+            price_change=float(futures_data.price_change),
+            price_change_percent=float(futures_data.price_change_percent),
+            volume_24h=float(futures_data.volume_24h),
+            quote_volume_24h=float(futures_data.quote_volume_24h),
+            timestamp=futures_data.timestamp,
+            
+            # 期货特有字段
+            funding_rate=float(futures_data.funding_rate) if futures_data.funding_rate else None,
+            open_interest=float(futures_data.open_interest) if futures_data.open_interest else None,
+            index_price=float(futures_data.index_price) if futures_data.index_price else None,
+            mark_price=float(futures_data.mark_price) if futures_data.mark_price else None
+        )
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取期货价格失败: {str(e)}")
 
@@ -247,8 +297,48 @@ async def get_futures_tickers(
 ):
     """批量获取期货市场价格信息"""
     try:
-        # TODO: 实现批量获取逻辑
-        raise HTTPException(status_code=501, detail="批量获取期货价格API正在实现中")
+        # 默认获取热门期货交易对
+        if symbols is None:
+            symbols = ["BTCUSDT-PERP", "ETHUSDT-PERP", "BNBUSDT-PERP", "ADAUSDT-PERP", "SOLUSDT-PERP"]
+        
+        # 获取数据聚合器
+        data_aggregator = await get_data_aggregator()
+        
+        # 批量获取期货市场数据
+        futures_data_dict = {}
+        for symbol in symbols:
+            try:
+                futures_data = await data_aggregator.futures_aggregator.get_futures_market_data(exchange, symbol)
+                if futures_data:
+                    futures_data_dict[symbol] = futures_data
+            except Exception as e:
+                logger.warning(f"获取期货数据失败 {symbol}: {e}")
+                continue
+        
+        # 转换为API响应格式
+        responses = []
+        for symbol, futures_data in futures_data_dict.items():
+            response = MarketDataResponse(
+                symbol=futures_data.symbol,
+                current_price=float(futures_data.current_price),
+                previous_close=float(futures_data.previous_close),
+                high_24h=float(futures_data.high_24h),
+                low_24h=float(futures_data.low_24h),
+                price_change=float(futures_data.price_change),
+                price_change_percent=float(futures_data.price_change_percent),
+                volume_24h=float(futures_data.volume_24h),
+                quote_volume_24h=float(futures_data.quote_volume_24h),
+                timestamp=futures_data.timestamp,
+                
+                # 期货特有字段
+                funding_rate=float(futures_data.funding_rate) if futures_data.funding_rate else None,
+                open_interest=float(futures_data.open_interest) if futures_data.open_interest else None,
+                index_price=float(futures_data.index_price) if futures_data.index_price else None,
+                mark_price=float(futures_data.mark_price) if futures_data.mark_price else None
+            )
+            responses.append(response)
+        
+        return responses
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"批量获取期货价格失败: {str(e)}")
@@ -302,6 +392,93 @@ async def get_futures_klines(
         raise HTTPException(status_code=500, detail=f"获取期货K线数据失败: {str(e)}")
 
 
+@router.get("/futures/funding-rate", response_model=FundingRateResponse)
+async def get_futures_funding_rate(
+    symbol: str = Query(..., description="交易对符号"),
+    exchange: str = Query("binance", description="交易所名称")
+):
+    """获取期货资金费率"""
+    try:
+        # 获取数据聚合器
+        data_aggregator = await get_data_aggregator()
+        
+        # 获取资金费率数据
+        funding_data = await data_aggregator.futures_aggregator.get_funding_rate_data(exchange, symbol)
+        
+        if funding_data is None:
+            raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的资金费率数据")
+        
+        return FundingRateResponse(
+            symbol=funding_data.get('symbol', symbol),
+            funding_rate=float(funding_data.get('last_funding_rate', 0)),
+            next_funding_time=funding_data.get('next_funding_time', datetime.utcnow()),
+            exchange=exchange,
+            timestamp=datetime.utcnow()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取资金费率失败: {str(e)}")
+
+
+@router.get("/futures/open-interest", response_model=OpenInterestResponse)
+async def get_futures_open_interest(
+    symbol: str = Query(..., description="交易对符号"),
+    exchange: str = Query("binance", description="交易所名称")
+):
+    """获取期货持仓量"""
+    try:
+        # 获取数据聚合器
+        data_aggregator = await get_data_aggregator()
+        
+        # 获取持仓量数据
+        oi_data = await data_aggregator.futures_aggregator.get_open_interest_data(exchange, symbol)
+        
+        if oi_data is None:
+            raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的持仓量数据")
+        
+        return OpenInterestResponse(
+            symbol=oi_data.get('symbol', symbol),
+            open_interest=float(oi_data.get('open_interest', 0)),
+            open_interest_value=float(oi_data.get('open_interest_value', 0)),
+            exchange=exchange,
+            timestamp=datetime.utcnow()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取持仓量失败: {str(e)}")
+
+
+@router.get("/futures/summary")
+async def get_futures_summary(
+    symbols: Optional[List[str]] = Query(None, description="交易对符号列表"),
+    exchange: str = Query("binance", description="交易所名称")
+):
+    """获取期货市场摘要信息"""
+    try:
+        # 默认获取热门期货交易对
+        if symbols is None:
+            symbols = ["BTCUSDT-PERP", "ETHUSDT-PERP", "BNBUSDT-PERP"]
+        
+        # 获取数据聚合器
+        data_aggregator = await get_data_aggregator()
+        
+        # 获取期货摘要数据
+        summary = await data_aggregator.futures_aggregator.get_futures_summary(exchange, symbols)
+        
+        return {
+            "exchange": exchange,
+            "summary": summary,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取期货摘要失败: {str(e)}")
+
+
 # 市场概览API
 @router.get("/overview")
 async def get_market_overview():
@@ -312,6 +489,7 @@ async def get_market_overview():
         
         # 获取主流现货交易对数据
         spot_symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "ADAUSDT", "SOLUSDT", "MATICUSDT", "DOTUSDT", "LINKUSDT"]
+        futures_symbols = ["BTCUSDT-PERP", "ETHUSDT-PERP", "BNBUSDT-PERP", "ADAUSDT-PERP", "SOLUSDT-PERP"]
         
         # 获取现货市场数据
         spot_data = await data_aggregator.get_multiple_market_data("binance", "spot", spot_symbols)
@@ -339,9 +517,40 @@ async def get_market_overview():
                 elif market_data.price_change_percent < 0:
                     spot_losers.append(market_info)
         
+        # 获取期货市场数据
+        futures_markets = []
+        futures_gainers = []
+        futures_losers = []
+        
+        try:
+            for symbol in futures_symbols:
+                futures_data = await data_aggregator.futures_aggregator.get_futures_market_data("binance", symbol)
+                if futures_data:
+                    market_info = {
+                        "symbol": symbol,
+                        "price": float(futures_data.current_price),
+                        "change_percent": float(futures_data.price_change_percent),
+                        "volume": float(futures_data.volume_24h),
+                        "high_24h": float(futures_data.high_24h),
+                        "low_24h": float(futures_data.low_24h),
+                        "funding_rate": float(futures_data.funding_rate) if futures_data.funding_rate else None,
+                        "open_interest": float(futures_data.open_interest) if futures_data.open_interest else None
+                    }
+                    futures_markets.append(market_info)
+                    
+                    # 分类涨跌
+                    if futures_data.price_change_percent > 0:
+                        futures_gainers.append(market_info)
+                    elif futures_data.price_change_percent < 0:
+                        futures_losers.append(market_info)
+        except Exception as e:
+            logger.warning(f"获取期货市场数据失败: {e}")
+        
         # 按涨跌幅排序
         spot_gainers.sort(key=lambda x: x["change_percent"], reverse=True)
         spot_losers.sort(key=lambda x: x["change_percent"])
+        futures_gainers.sort(key=lambda x: x["change_percent"], reverse=True)
+        futures_losers.sort(key=lambda x: x["change_percent"])
         
         return {
             "spot_markets": {
@@ -351,10 +560,10 @@ async def get_market_overview():
                 "top_losers": spot_losers[:5]    # 前5个跌幅
             },
             "futures_markets": {
-                "count": 0,
-                "top_gainers": [],
-                "top_losers": [],
-                "message": "期货市场API开发中"
+                "count": len(futures_markets),
+                "markets": futures_markets,
+                "top_gainers": futures_gainers[:5],
+                "top_losers": futures_losers[:5]
             },
             "global_market_status": "open",
             "timestamp": datetime.utcnow().isoformat(),

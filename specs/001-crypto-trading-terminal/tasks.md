@@ -86,23 +86,23 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T030 [P] [US2] Contract test for Binance Futures API integration in tests/integration/test_binance_futures.py
-- [ ] T031 [P] [US2] Contract test for OKX Derivatives API integration in tests/integration/test_okx_derivatives.py
-- [ ] T032 [P] [US2] Integration test for futures-specific data flow in tests/integration/test_futures_data_flow.py
+- [✅] T030 [P] [US2] Contract test for Binance Futures API integration in tests/integration/test_binance_futures.py
+- [✅] T031 [P] [US2] Contract test for OKX Derivatives API integration in tests/integration/test_okx_derivatives.py
+- [✅] T032 [P] [US2] Integration test for futures-specific data flow in tests/integration/test_futures_data_flow.py
 
 ### Implementation for User Story 2
 
-- [ ] T033 [P] [US2] Create Binance Futures adapter in backend/src/adapters/binance/futures.py
-- [ ] T034 [P] [US2] Create OKX Derivatives adapter in backend/src/adapters/okx/derivatives.py
-- [ ] T035 [P] [US2] Extend MarketData model for futures-specific fields (funding_rate, open_interest)
-- [ ] T036 [US2] Implement separate futures data aggregation service in backend/src/core/data_aggregator.py
-- [ ] T037 [US2] Create futures-specific WebSocket connection manager
-- [ ] T038 [US2] Extend market data API for futures endpoints in backend/src/api/routes/market.py
-- [ ] T039 [US2] Create FuturesMarketDataProvider in Flutter frontend/lib/presentation/providers/futures_market_provider.dart
-- [ ] T040 [US2] Implement futures trading page UI in frontend/lib/presentation/pages/futures_trade/futures_market_page.dart
-- [ ] T041 [US2] Create futures-specific market card widget with funding rate display
-- [ ] T042 [US2] Implement futures chart component with multiple data dimensions (price, volume, funding_rate)
-- [ ] T043 [US2] Ensure complete data isolation from spot markets
+- [✅] T033 [P] [US2] Create Binance Futures adapter in backend/src/adapters/binance/futures.py
+- [✅] T034 [P] [US2] Create OKX Derivatives adapter in backend/src/adapters/okx/derivatives.py
+- [✅] T035 [P] [US2] Extend MarketData model for futures-specific fields (funding_rate, open_interest)
+- [✅] T036 [US2] Implement separate futures data aggregation service in backend/src/core/data_aggregator.py
+- [✅] T037 [US2] Create futures-specific WebSocket connection manager
+- [✅] T038 [US2] Extend market data API for futures endpoints in backend/src/api/routes/market.py
+- [✅] T039 [US2] Create FuturesMarketDataProvider in Flutter frontend/lib/presentation/providers/futures_market_provider.dart
+- [✅] T040 [US2] Implement futures trading page UI in frontend/lib/presentation/pages/futures_trade/futures_market_page.dart
+- [✅] T041 [US2] Create futures-specific market card widget with funding rate display
+- [✅] T042 [US2] Implement futures chart component with multiple data dimensions (price, volume, funding_rate)
+- [✅] T043 [US2] Ensure complete data isolation from spot markets
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently with complete data separation
 

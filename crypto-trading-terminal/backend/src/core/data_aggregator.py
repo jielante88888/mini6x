@@ -34,6 +34,9 @@ class DataAggregator:
         self.is_running = False
         self.cache_manager = get_market_cache()
         
+        # 期货数据聚合器
+        self.futures_aggregator = FuturesDataAggregator(self)
+        
         # 数据更新统计
         self.update_stats = {
             "total_updates": 0,
@@ -356,6 +359,10 @@ class DataAggregator:
         try:
             logger.info("清理数据聚合器资源...")
             
+            # 清理期货数据聚合器
+            if hasattr(self, 'futures_aggregator'):
+                await self.futures_aggregator.cleanup()
+            
             # 关闭所有适配器连接
             for adapter in self.adapters.values():
                 await adapter.disconnect()
@@ -369,6 +376,318 @@ class DataAggregator:
             
         except Exception as e:
             logger.error(f"清理资源失败: {e}")
+
+
+class FuturesDataAggregator:
+    """期货数据聚合器 - 专门处理期货市场的数据聚合"""
+    
+    def __init__(self, main_aggregator: DataAggregator):
+        self.main_aggregator = main_aggregator
+        
+        # 期货专用缓存
+        self.futures_data_cache: Dict[str, MarketData] = {}
+        self.funding_rate_cache: Dict[str, Dict] = {}
+        self.open_interest_cache: Dict[str, Dict] = {}
+        
+        # 期货市场监控
+        self.active_futures_subscriptions: Set[str] = set()
+        self.futures_monitoring_tasks: Dict[str, asyncio.Task] = {}
+        
+        logger.info("期货数据聚合器初始化完成")
+    
+    async def get_futures_market_data(
+        self, 
+        exchange: str, 
+        symbol: str
+    ) -> Optional[MarketData]:
+        """获取期货市场数据"""
+        try:
+            # 检查期货缓存
+            cache_key = f"{exchange}:futures:{symbol}"
+            
+            if cache_key in self.futures_data_cache:
+                cached_data = self.futures_data_cache[cache_key]
+                # 检查缓存是否仍然有效（5分钟内）
+                if (datetime.now(timezone.utc) - cached_data.timestamp).total_seconds() < 300:
+                    logger.debug(f"期货数据缓存命中: {cache_key}")
+                    return cached_data
+            
+            # 从主聚合器获取数据
+            futures_data = await self.main_aggregator.get_market_data(
+                exchange, "futures", symbol
+            )
+            
+            if futures_data:
+                # 验证期货特有字段
+                if futures_data.funding_rate is None:
+                    # 获取资金费率
+                    funding_rate_data = await self.get_funding_rate_data(exchange, symbol)
+                    if funding_rate_data:
+                        futures_data = futures_data.copy_with(
+                            funding_rate=funding_rate_data.get('last_funding_rate')
+                        )
+                
+                if futures_data.open_interest is None:
+                    # 获取持仓量
+                    oi_data = await self.get_open_interest_data(exchange, symbol)
+                    if oi_data:
+                        futures_data = futures_data.copy_with(
+                            open_interest=oi_data.get('open_interest')
+                        )
+                
+                # 缓存期货数据
+                self.futures_data_cache[cache_key] = futures_data
+                
+                logger.debug(f"获取期货数据成功: {cache_key}")
+                return futures_data
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"获取期货数据失败 {exchange}:{symbol}: {e}")
+            return None
+    
+    async def get_funding_rate_data(
+        self, 
+        exchange: str, 
+        symbol: str
+    ) -> Optional[Dict[str, Any]]:
+        """获取资金费率数据"""
+        try:
+            cache_key = f"{exchange}:futures:{symbol}"
+            
+            if cache_key in self.funding_rate_cache:
+                return self.funding_rate_cache[cache_key]
+            
+            # 获取适配器
+            exchange_key = f"{exchange}_futures"
+            if exchange_key not in self.main_aggregator.adapters:
+                raise DataAggregationError(f"不支持的期货交易所: {exchange_key}")
+            
+            adapter = self.main_aggregator.adapters[exchange_key]
+            
+            # 获取资金费率
+            if hasattr(adapter, 'get_funding_rate'):
+                funding_rate_data = await adapter.get_funding_rate(symbol)
+                if funding_rate_data:
+                    self.funding_rate_cache[cache_key] = funding_rate_data
+                    return funding_rate_data
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"获取资金费率失败 {exchange}:{symbol}: {e}")
+            return None
+    
+    async def get_open_interest_data(
+        self, 
+        exchange: str, 
+        symbol: str
+    ) -> Optional[Dict[str, Any]]:
+        """获取持仓量数据"""
+        try:
+            cache_key = f"{exchange}:futures:{symbol}"
+            
+            if cache_key in self.open_interest_cache:
+                return self.open_interest_cache[cache_key]
+            
+            # 获取适配器
+            exchange_key = f"{exchange}_futures"
+            if exchange_key not in self.main_aggregator.adapters:
+                raise DataAggregationError(f"不支持的期货交易所: {exchange_key}")
+            
+            adapter = self.main_aggregator.adapters[exchange_key]
+            
+            # 获取持仓量
+            if hasattr(adapter, 'get_open_interest'):
+                oi_data = await adapter.get_open_interest(symbol)
+                if oi_data:
+                    self.open_interest_cache[cache_key] = oi_data
+                    return oi_data
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"获取持仓量失败 {exchange}:{symbol}: {e}")
+            return None
+    
+    async def monitor_futures_market(
+        self, 
+        exchange: str, 
+        symbols: List[str],
+        update_interval: float = 5.0
+    ) -> AsyncGenerator[MarketData, None]:
+        """监控期货市场数据"""
+        try:
+            # 启动监控任务
+            for symbol in symbols:
+                subscription_key = f"{exchange}:{symbol}"
+                if subscription_key not in self.active_futures_subscriptions:
+                    self.active_futures_subscriptions.add(subscription_key)
+                    
+                    # 启动单独的数据更新任务
+                    task = asyncio.create_task(
+                        self._futures_monitoring_loop(
+                            exchange, symbol, update_interval
+                        )
+                    )
+                    self.futures_monitoring_tasks[subscription_key] = task
+            
+            # 生成数据流
+            while True:
+                for symbol in symbols:
+                    cache_key = f"{exchange}:futures:{symbol}"
+                    if cache_key in self.futures_data_cache:
+                        yield self.futures_data_cache[cache_key]
+                
+                await asyncio.sleep(update_interval)
+                
+        except asyncio.CancelledError:
+            logger.info("期货市场监控已取消")
+            raise
+        except Exception as e:
+            logger.error(f"期货市场监控错误: {e}")
+            raise
+    
+    async def _futures_monitoring_loop(
+        self, 
+        exchange: str, 
+        symbol: str, 
+        interval: float
+    ):
+        """期货市场监控循环"""
+        try:
+            while True:
+                try:
+                    # 获取最新数据
+                    futures_data = await self.get_futures_market_data(exchange, symbol)
+                    
+                    if futures_data:
+                        logger.debug(f"期货数据更新: {exchange}:{symbol}")
+                    
+                    await asyncio.sleep(interval)
+                    
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"期货监控循环错误 {exchange}:{symbol}: {e}")
+                    await asyncio.sleep(interval * 2)  # 出错时延长间隔
+        
+        finally:
+            # 清理资源
+            subscription_key = f"{exchange}:{symbol}"
+            self.active_futures_subscriptions.discard(subscription_key)
+            self.futures_monitoring_tasks.pop(subscription_key, None)
+    
+    async def stop_monitoring(
+        self, 
+        exchange: str, 
+        symbol: str
+    ):
+        """停止监控指定期货交易对"""
+        subscription_key = f"{exchange}:{symbol}"
+        
+        # 取消监控任务
+        if subscription_key in self.futures_monitoring_tasks:
+            task = self.futures_monitoring_tasks[subscription_key]
+            task.cancel()
+            
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            
+            del self.futures_monitoring_tasks[subscription_key]
+        
+        # 清理订阅
+        self.active_futures_subscriptions.discard(subscription_key)
+        
+        logger.info(f"停止期货监控: {subscription_key}")
+    
+    async def get_futures_summary(
+        self, 
+        exchange: str, 
+        symbols: List[str]
+    ) -> Dict[str, Any]:
+        """获取期货市场摘要"""
+        try:
+            futures_data_list = []
+            funding_rates = []
+            open_interests = []
+            
+            for symbol in symbols:
+                # 获取期货数据
+                futures_data = await self.get_futures_market_data(exchange, symbol)
+                if futures_data:
+                    futures_data_list.append(futures_data)
+                    
+                    # 收集资金费率
+                    if futures_data.funding_rate is not None:
+                        funding_rates.append(futures_data.funding_rate)
+                    
+                    # 收集持仓量
+                    if futures_data.open_interest is not None:
+                        open_interests.append(futures_data.open_interest)
+            
+            # 计算统计信息
+            summary = {
+                "exchange": exchange,
+                "symbols_count": len(futures_data_list),
+                "total_volume": sum(data.volume_24h for data in futures_data_list),
+                "avg_price": sum(data.current_price for data in futures_data_list) / len(futures_data_list) if futures_data_list else 0,
+                "price_range": {
+                    "highest": max(data.high_24h for data in futures_data_list) if futures_data_list else 0,
+                    "lowest": min(data.low_24h for data in futures_data_list) if futures_data_list else 0
+                },
+                "funding_rates": {
+                    "average": sum(funding_rates) / len(funding_rates) if funding_rates else 0,
+                    "highest": max(funding_rates) if funding_rates else 0,
+                    "lowest": min(funding_rates) if funding_rates else 0
+                },
+                "open_interests": {
+                    "total": sum(open_interests),
+                    "average": sum(open_interests) / len(open_interests) if open_interests else 0
+                },
+                "update_time": datetime.now(timezone.utc)
+            }
+            
+            return summary
+            
+        except Exception as e:
+            logger.error(f"获取期货摘要失败 {exchange}: {e}")
+            raise DataAggregationError(f"期货摘要获取失败: {e}")
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """获取缓存统计信息"""
+        return {
+            "futures_data_cache_size": len(self.futures_data_cache),
+            "funding_rate_cache_size": len(self.funding_rate_cache),
+            "open_interest_cache_size": len(self.open_interest_cache),
+            "active_subscriptions": len(self.active_futures_subscriptions),
+            "monitoring_tasks": len(self.futures_monitoring_tasks)
+        }
+    
+    async def cleanup(self):
+        """清理资源"""
+        # 取消所有监控任务
+        for task in self.futures_monitoring_tasks.values():
+            task.cancel()
+        
+        # 等待任务完成
+        if self.futures_monitoring_tasks:
+            await asyncio.gather(
+                *self.futures_monitoring_tasks.values(),
+                return_exceptions=True
+            )
+        
+        # 清理缓存
+        self.futures_data_cache.clear()
+        self.funding_rate_cache.clear()
+        self.open_interest_cache.clear()
+        self.active_futures_subscriptions.clear()
+        self.futures_monitoring_tasks.clear()
+        
+        logger.info("期货数据聚合器已清理")
 
 
 # 全局数据聚合器实例
@@ -415,6 +734,13 @@ if __name__ == "__main__":
             health = await aggregator.health_check()
             print(f"✅ 健康状态: {health['status']}")
             print(f"   适配器数量: {len(health['adapters'])}")
+            
+            # 测试期货数据聚合器
+            if hasattr(aggregator, 'futures_aggregator'):
+                futures_data = await aggregator.futures_aggregator.get_futures_market_data("binance", "BTCUSDT-PERP")
+                if futures_data:
+                    print(f"✅ BTC期货价格: ${futures_data.current_price}")
+                    print(f"   资金费率: {futures_data.funding_rate}")
             
         except Exception as e:
             print(f"❌ 测试失败: {e}")

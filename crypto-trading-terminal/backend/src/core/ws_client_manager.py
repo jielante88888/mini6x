@@ -34,6 +34,9 @@ class WebSocketClientManager:
         # 回调函数
         self.data_callbacks: Dict[str, List[Callable]] = {}
         
+        # 期货专用WebSocket管理器
+        self.futures_ws_manager = FuturesWebSocketManager(self)
+        
         # 连接统计
         self.stats = {
             "total_connections": 0,
@@ -525,7 +528,450 @@ if __name__ == "__main__":
     import asyncio
     
     async def test_ws_client_manager():
-        print("测试WebSocket客户端管理器...")
+class FuturesWebSocketManager:
+    """期货专用WebSocket管理器 - 专门处理期货市场的实时数据连接"""
+    
+    def __init__(self, main_manager: WebSocketClientManager):
+        self.main_manager = main_manager
+        
+        # 期货专用连接管理
+        self.futures_connections: Dict[str, WebSocketConnection] = {}
+        self.futures_subscriptions: Dict[str, SubscriptionConfig] = {}
+        
+        # 期货特有数据处理
+        self.funding_rate_callbacks: Dict[str, Callable] = {}
+        self.open_interest_callbacks: Dict[str, Callable] = {}
+        
+        # 期货市场监控
+        self.futures_monitoring_tasks: Dict[str, asyncio.Task] = {}
+        self.funding_rate_queues: Dict[str, asyncio.Queue] = {}
+        
+        logger.info("期货专用WebSocket管理器初始化完成")
+    
+    async def subscribe_futures_market_data(
+        self,
+        exchange: str,
+        symbol: str,
+        callback: Callable[[Dict], None],
+        market_data_types: List[str] = None
+    ) -> str:
+        """订阅期货市场数据"""
+        try:
+            if market_data_types is None:
+                market_data_types = ["ticker", "orderbook", "trades"]
+            
+            subscription_id = f"futures:{exchange}:{symbol}:{','.join(market_data_types)}"
+            
+            # 创建订阅配置
+            config = SubscriptionConfig(
+                subscription_id=subscription_id,
+                exchange=exchange,
+                market_type="futures",
+                symbol=symbol,
+                data_types=market_data_types,
+                callback=callback,
+                auto_reconnect=True,
+                max_retries=5
+            )
+            
+            self.futures_subscriptions[subscription_id] = config
+            
+            # 建立WebSocket连接
+            connection_id = await self._create_futures_connection(exchange, symbol)
+            config.connection_id = connection_id
+            
+            # 发送订阅消息
+            await self._send_subscription_messages(connection_id, market_data_types, symbol)
+            
+            # 启动数据监控
+            await self._start_futures_monitoring(exchange, symbol, config)
+            
+            logger.info(f"期货市场数据订阅成功: {subscription_id}")
+            return subscription_id
+            
+        except Exception as e:
+            logger.error(f"期货市场数据订阅失败: {e}")
+            raise WebSocketError(f"期货数据订阅失败: {e}")
+    
+    async def _create_futures_connection(
+        self,
+        exchange: str,
+        symbol: str
+    ) -> str:
+        """创建期货专用WebSocket连接"""
+        try:
+            # 构建期货WebSocket URL
+            ws_url = self._get_futures_ws_url(exchange, symbol)
+            
+            connection_id = f"futures_{exchange}_{symbol}_{int(asyncio.get_event_loop().time())}"
+            
+            # 创建WebSocket连接
+            connection = WebSocketConnection(
+                connection_id=connection_id,
+                exchange=exchange,
+                market_type="futures",
+                symbol=symbol,
+                ws_url=ws_url,
+                auto_reconnect=True,
+                reconnect_interval=5.0,
+                max_reconnect_attempts=10
+            )
+            
+            self.futures_connections[connection_id] = connection
+            await connection.connect()
+            
+            logger.info(f"期货WebSocket连接建立: {connection_id}")
+            return connection_id
+            
+        except Exception as e:
+            logger.error(f"期货WebSocket连接失败: {e}")
+            raise WebSocketError(f"期货连接失败: {e}")
+    
+    def _get_futures_ws_url(self, exchange: str, symbol: str) -> str:
+        """获取期货WebSocket URL"""
+        if exchange.lower() == "binance":
+            # 币安期货WebSocket
+            symbol_lower = symbol.lower().replace("-usdt-perp", "usdt")
+            return f"wss://fstream.binance.com/ws/{symbol_lower}@ticker"
+        elif exchange.lower() == "okx":
+            # OKX期货WebSocket
+            return f"wss://ws.okx.com:8443/ws/v5/public"
+        else:
+            raise ValueError(f"不支持的期货交易所: {exchange}")
+    
+    async def _send_subscription_messages(
+        self,
+        connection_id: str,
+        data_types: List[str],
+        symbol: str
+    ):
+        """发送订阅消息"""
+        connection = self.futures_connections.get(connection_id)
+        if not connection:
+            return
+        
+        if connection.exchange == "binance":
+            # 币安期货订阅格式
+            for data_type in data_types:
+                if data_type == "ticker":
+                    subscribe_msg = {
+                        "method": "SUBSCRIBE",
+                        "params": [f"{symbol.lower().replace('-usdt-perp', 'usdt')}@ticker"],
+                        "id": int(asyncio.get_event_loop().time())
+                    }
+                    await connection.send_message(subscribe_msg)
+        
+        elif connection.exchange == "okx":
+            # OKX期货订阅格式
+            subscribe_msg = {
+                "op": "subscribe",
+                "args": [
+                    {
+                        "channel": "tickers",
+                        "instId": symbol
+                    }
+                ]
+            }
+            await connection.send_message(subscribe_msg)
+    
+    async def _start_futures_monitoring(
+        self,
+        exchange: str,
+        symbol: str,
+        config: SubscriptionConfig
+    ):
+        """启动期货市场监控"""
+        try:
+            # 创建数据处理任务
+            task = asyncio.create_task(
+                self._futures_data_processing_loop(exchange, symbol, config)
+            )
+            
+            monitoring_key = f"{exchange}:{symbol}"
+            self.futures_monitoring_tasks[monitoring_key] = task
+            
+        except Exception as e:
+            logger.error(f"期货市场监控启动失败: {e}")
+    
+    async def _futures_data_processing_loop(
+        self,
+        exchange: str,
+        symbol: str,
+        config: SubscriptionConfig
+    ):
+        """期货数据处理循环"""
+        try:
+            connection_id = config.connection_id
+            connection = self.futures_connections.get(connection_id)
+            
+            if not connection:
+                return
+            
+            async for message in connection.message_stream:
+                try:
+                    # 解析期货数据
+                    futures_data = self._parse_futures_message(message, exchange)
+                    
+                    if futures_data:
+                        # 调用回调函数
+                        config.callback(futures_data)
+                        
+                        # 处理期货特有数据
+                        await self._process_futures_specific_data(futures_data, exchange, symbol)
+                
+                except Exception as e:
+                    logger.error(f"期货数据处理错误: {e}")
+        
+        except asyncio.CancelledError:
+            logger.info(f"期货数据处理循环已取消: {exchange}:{symbol}")
+        except Exception as e:
+            logger.error(f"期货数据处理循环错误: {exchange}:{symbol}: {e}")
+        finally:
+            # 清理任务
+            monitoring_key = f"{exchange}:{symbol}"
+            self.futures_monitoring_tasks.pop(monitoring_key, None)
+    
+    def _parse_futures_message(
+        self,
+        message: str,
+        exchange: str
+    ) -> Optional[Dict]:
+        """解析期货WebSocket消息"""
+        try:
+            data = json.loads(message)
+            
+            if exchange.lower() == "binance":
+                return self._parse_binance_futures_data(data)
+            elif exchange.lower() == "okx":
+                return self._parse_okx_futures_data(data)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"期货消息解析失败: {e}")
+            return None
+    
+    def _parse_binance_futures_data(self, data: Dict) -> Optional[Dict]:
+        """解析币安期货数据"""
+        if 'e' in data and data['e'] == '24hrTicker':
+            return {
+                "symbol": data['s'],
+                "price": float(data['c']),
+                "price_change": float(data['p']),
+                "price_change_percent": float(data['P']),
+                "volume": float(data['v']),
+                "high_24h": float(data['h']),
+                "low_24h": float(data['l']),
+                "funding_rate": float(data.get('F', 0)),
+                "open_interest": float(data.get('o', 0)),
+                "mark_price": float(data.get('c', 0)),
+                "index_price": float(data.get('i', 0)),
+                "timestamp": datetime.utcnow(),
+                "exchange": "binance",
+                "market_type": "futures"
+            }
+        
+        return None
+    
+    def _parse_okx_futures_data(self, data: Dict) -> Optional[Dict]:
+        """解析OKX期货数据"""
+        if 'data' in data and data['data']:
+            ticker_data = data['data'][0]
+            if 'instId' in ticker_data:
+                return {
+                    "symbol": ticker_data['instId'],
+                    "price": float(ticker_data['last']),
+                    "price_change": float(ticker_data.get('ch', 0)),
+                    "price_change_percent": float(ticker_data.get('chUsd', 0)),
+                    "volume": float(ticker_data['vol24h']),
+                    "high_24h": float(ticker_data['high24h']),
+                    "low_24h": float(ticker_data['low24h']),
+                    "funding_rate": float(ticker_data.get('fundingRate', 0)),
+                    "open_interest": float(ticker_data.get('oi', 0)),
+                    "mark_price": float(ticker_data.get('markPrice', ticker_data['last'])),
+                    "index_price": float(ticker_data.get('indexPrice', ticker_data['last'])),
+                    "timestamp": datetime.utcnow(),
+                    "exchange": "okx",
+                    "market_type": "futures"
+                }
+        
+        return None
+    
+    async def _process_futures_specific_data(
+        self,
+        data: Dict,
+        exchange: str,
+        symbol: str
+    ):
+        """处理期货特有数据"""
+        try:
+            # 处理资金费率数据
+            if 'funding_rate' in data and data['funding_rate'] != 0:
+                funding_key = f"{exchange}:{symbol}"
+                if funding_key in self.funding_rate_callbacks:
+                    self.funding_rate_callbacks[funding_key]({
+                        "symbol": symbol,
+                        "funding_rate": data['funding_rate'],
+                        "timestamp": data['timestamp'],
+                        "exchange": exchange
+                    })
+            
+            # 处理持仓量数据
+            if 'open_interest' in data and data['open_interest'] != 0:
+                oi_key = f"{exchange}:{symbol}"
+                if oi_key in self.open_interest_callbacks:
+                    self.open_interest_callbacks[oi_key]({
+                        "symbol": symbol,
+                        "open_interest": data['open_interest'],
+                        "timestamp": data['timestamp'],
+                        "exchange": exchange
+                    })
+        
+        except Exception as e:
+            logger.error(f"期货特有数据处理错误: {e}")
+    
+    async def subscribe_funding_rate(
+        self,
+        exchange: str,
+        symbol: str,
+        callback: Callable[[Dict], None]
+    ) -> str:
+        """订阅资金费率数据"""
+        funding_key = f"{exchange}:{symbol}"
+        self.funding_rate_callbacks[funding_key] = callback
+        
+        logger.info(f"资金费率订阅成功: {funding_key}")
+        return funding_key
+    
+    async def subscribe_open_interest(
+        self,
+        exchange: str,
+        symbol: str,
+        callback: Callable[[Dict], None]
+    ) -> str:
+        """订阅持仓量数据"""
+        oi_key = f"{exchange}:{symbol}"
+        self.open_interest_callbacks[oi_key] = callback
+        
+        logger.info(f"持仓量订阅成功: {oi_key}")
+        return oi_key
+    
+    async def unsubscribe_futures_data(
+        self,
+        exchange: str,
+        symbol: str
+    ):
+        """取消期货数据订阅"""
+        try:
+            # 查找并取消订阅
+            subscription_id = f"futures:{exchange}:{symbol}:ticker"
+            
+            if subscription_id in self.futures_subscriptions:
+                config = self.futures_subscriptions[subscription_id]
+                
+                # 取消监控任务
+                monitoring_key = f"{exchange}:{symbol}"
+                if monitoring_key in self.futures_monitoring_tasks:
+                    task = self.futures_monitoring_tasks[monitoring_key]
+                    task.cancel()
+                    
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                    
+                    del self.futures_monitoring_tasks[monitoring_key]
+                
+                # 关闭连接
+                if config.connection_id in self.futures_connections:
+                    connection = self.futures_connections[config.connection_id]
+                    await connection.disconnect()
+                    del self.futures_connections[config.connection_id]
+                
+                # 清理订阅
+                del self.futures_subscriptions[subscription_id]
+                
+                logger.info(f"期货数据订阅已取消: {subscription_id}")
+            
+        except Exception as e:
+            logger.error(f"取消期货数据订阅失败: {e}")
+    
+    async def get_futures_connection_status(self) -> Dict[str, Any]:
+        """获取期货连接状态"""
+        status = {
+            "total_connections": len(self.futures_connections),
+            "active_subscriptions": len(self.futures_subscriptions),
+            "monitoring_tasks": len(self.futures_monitoring_tasks),
+            "funding_rate_subscriptions": len(self.funding_rate_callbacks),
+            "open_interest_subscriptions": len(self.open_interest_callbacks),
+            "connections": {}
+        }
+        
+        for connection_id, connection in self.futures_connections.items():
+            status["connections"][connection_id] = {
+                "exchange": connection.exchange,
+                "symbol": connection.symbol,
+                "is_connected": connection.is_connected,
+                "last_message": connection.last_message_time
+            }
+        
+        return status
+    
+    async def cleanup(self):
+        """清理期货WebSocket资源"""
+        try:
+            # 取消所有监控任务
+            for task in self.futures_monitoring_tasks.values():
+                task.cancel()
+            
+            # 等待任务完成
+            if self.futures_monitoring_tasks:
+                await asyncio.gather(
+                    *self.futures_monitoring_tasks.values(),
+                    return_exceptions=True
+                )
+            
+            # 关闭所有连接
+            for connection in self.futures_connections.values():
+                await connection.disconnect()
+            
+            # 清理缓存
+            self.futures_connections.clear()
+            self.futures_subscriptions.clear()
+            self.funding_rate_callbacks.clear()
+            self.open_interest_callbacks.clear()
+            self.futures_monitoring_tasks.clear()
+            
+            logger.info("期货WebSocket管理器清理完成")
+            
+        except Exception as e:
+            logger.error(f"期货WebSocket管理器清理失败: {e}")
+
+
+# 更新主管理器的cleanup方法
+def _add_futures_cleanup_to_main_manager():
+    """为主管理器添加期货清理功能"""
+    original_cleanup = WebSocketClientManager.cleanup
+    
+    async def enhanced_cleanup(self):
+        """增强的清理方法，包含期货管理器的清理"""
+        if hasattr(self, 'futures_ws_manager'):
+            await self.futures_ws_manager.cleanup()
+        
+        # 调用原始清理方法
+        if hasattr(original_cleanup, '__call__'):
+            await original_cleanup()
+    
+    WebSocketClientManager.cleanup = enhanced_cleanup
+
+
+# 应用增强
+_add_futures_cleanup_to_main_manager()
+
+
+# 更新测试代码
+if __name__ == "__main__":
+    print("测试WebSocket客户端管理器...")
         
         try:
             manager = await get_ws_client_manager()

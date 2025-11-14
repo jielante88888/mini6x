@@ -2,7 +2,7 @@
 # Supports both development and production builds
 
 # Base stage with Python and Flutter SDK
-FROM ubuntu:22.04 as base
+FROM ubuntu:22.04 AS base
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -60,13 +60,13 @@ ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
 
 # Development stage
-FROM base as development
+FROM base AS development
 
 # Set working directory
 WORKDIR /app
 
 # Copy requirements first for better caching
-COPY requirements.txt ./
+COPY requirements-minimal.txt requirements.txt
 RUN pip3.14 install --no-cache-dir -r requirements.txt
 
 # Copy project files
@@ -82,7 +82,7 @@ EXPOSE 8000
 CMD ["bash"]
 
 # Python backend stage
-FROM base as backend
+FROM base AS backend
 
 WORKDIR /app
 
@@ -105,13 +105,13 @@ EXPOSE 8000
 CMD ["python3.14", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # Flutter frontend build stage
-FROM development as flutter-build
+FROM development AS flutter-build
 
 # Build Flutter application
 RUN flutter build linux --release
 
 # Multi-stage build for final production image
-FROM base as production
+FROM base AS production
 
 WORKDIR /app
 
