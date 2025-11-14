@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <!-- OKX数据访问代码片段 -->
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>OKX数据访问</Title>
+      <Shortcut>okxdata</Shortcut>
+      <Description>快速访问OKX交易数据</Description>
+      <Author>TradingBot</Author>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Code Language="Python">
+        <![CDATA[
+import IDE快速访问脚本 as data
+
+# 获取OKX交易数据
+okx_pairs = data.okx()
+print(f"OKX总交易对: {len(okx_pairs)}")
+
+# 搜索特定交易对
+btc_pairs = data.search("BTC")
+for exchange, pairs in btc_pairs.items():
+    print(f"{exchange} BTC交易对: {len(pairs)}")
+]]>
+      </Code>
+    </Snippet>
+  </CodeSnippet>
+
+  <!-- 币安数据访问代码片段 -->
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>币安数据访问</Title>
+      <Shortcut>bnbdata</Shortcut>
+      <Description>快速访问币安交易数据</Description>
+      <Author>TradingBot</Author>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Code Language="Python">
+        <![CDATA[
+import IDE快速访问脚本 as data
+
+# 获取币安交易数据
+binance_pairs = data.binance()
+print(f"币安总交易对: {len(binance_pairs)}")
+
+# 获取ETH相关交易对
+eth_pairs = data.binance("ETH")
+print(f"币安ETH交易对: {len(eth_pairs)}")
+]]>
+      </Code>
+      <Declarations>
+        <Literal>
+          <ID>currency</ID>
+          <Default>BTC</Default>
+          <ToolTip>要搜索的货币代码</ToolTip>
+        </Literal>
+      </Declarations>
+    </Snippet>
+  </CodeSnippet>
+
+  <!-- 交易对搜索代码片段 -->
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>交易对搜索</Title>
+      <Shortcut>searchpairs</Shortcut>
+      <Description>搜索指定交易对</Description>
+      <Author>TradingBot</Author>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Code Language="Python">
+        <![CDATA[
+import IDE快速访问脚本 as data
+
+# 搜索指定交易对
+search_results = data.search("$currency$")
+for exchange, pairs in search_results.items():
+    print(f"{exchange} {len(pairs)} 个$currency$交易对:")
+    for pair in pairs[:5]:  # 显示前5个
+        print(f"  - {pair['symbol']}: {pair.get('last_price', 'N/A')}")
+]]>
+      </Code>
+      <Declarations>
+        <Literal>
+          <ID>currency</ID>
+          <Default>BTC</Default>
+          <ToolTip>要搜索的货币代码</ToolTip>
+        </Literal>
+      </Declarations>
+    </Snippet>
+  </CodeSnippet>
+
+  <!-- 市场统计代码片段 -->
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>市场统计</Title>
+      <Shortcut>marketstats</Shortcut>
+      <Description>获取市场统计数据</Description>
+      <Author>TradingBot</Author>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Code Language="Python">
+        <![CDATA[
+import IDE快速访问脚本 as data
+
+# 获取市场统计信息
+stats = data.stats()
+print("=== 市场统计 ===")
+print(f"OKX总交易对: {stats['okx']['total']}")
+print(f"OKX现货: {stats['okx']['spot']}")
+print(f"OKX合约: {stats['okx']['swap']}")
+print(f"币安总交易对: {stats['binance']['total']}")
+print(f"币安现货: {stats['binance']['spot']}")
+print(f"共同交易对: {stats['common_pairs']}")
+
+# 获取共同交易对
+common = data.common()
+print(f"\n共同交易对数量: {len(common)}")
+for pair in common[:10]:
+    print(f"  - {pair['symbol']}")
+]]>
+      </Code>
+    </Snippet>
+  </CodeSnippet>
+
+  <!-- 套利分析代码片段 -->
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>套利机会分析</Title>
+      <Shortcut>arbitrage</Shortcut>
+      <Description>分析OKX和币安的价格差异</Description>
+      <Author>TradingBot</Author>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Code Language="Python">
+        <![CDATA[
+import IDE快速访问脚本 as data
+
+# 获取共同交易对
+common_pairs = data.common()
+print(f"共同交易对: {len(common_pairs)}")
+
+# 分析价格差异
+arbitrage_opportunities = []
+for pair in common_pairs:
+    if pair.get('okx_price') and pair.get('binance_price'):
+        okx_price = float(pair['okx_price'])
+        binance_price = float(pair['binance_price'])
+        price_diff = abs(okx_price - binance_price) / min(okx_price, binance_price) * 100
+        
+        if price_diff > 1.0:  # 价格差异大于1%
+            arbitrage_opportunities.append({
+                'symbol': pair['symbol'],
+                'price_diff': price_diff,
+                'okx_price': okx_price,
+                'binance_price': binance_price
+            })
+
+# 按价格差异排序
+arbitrage_opportunities.sort(key=lambda x: x['price_diff'], reverse=True)
+
+print(f"\n套利机会 (价格差异>1%): {len(arbitrage_opportunities)}")
+for opp in arbitrage_opportunities[:5]:
+    print(f"  - {opp['symbol']}: {opp['price_diff']:.2f}%")
+    print(f"    OKX: {opp['okx_price']}, 币安: {opp['binance_price']}")
+]]>
+      </Code>
+    </Snippet>
+  </CodeSnippet>
+
+  <!-- 数据验证代码片段 -->
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>数据验证</Title>
+      <Shortcut>validate</Shortcut>
+      <Description>验证数据文件完整性</Description>
+      <Author>TradingBot</Author>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Code Language="Python">
+        <![CDATA[
+import os
+import IDE快速访问脚本 as data
+
+# 验证数据文件
+print("=== 数据文件验证 ===")
+print("当前目录文件:")
+for f in os.listdir('.'):
+    if 'market_data' in f:
+        print(f"  - {f}")
+
+# 测试数据加载
+print("\n数据加载测试:")
+try:
+    okx_pairs = data.load_okx_pairs()
+    print(f"✅ OKX数据加载成功: {len(okx_pairs)} 个交易对")
+except Exception as e:
+    print(f"❌ OKX数据加载失败: {e}")
+
+try:
+    binance_pairs = data.load_binance_pairs()
+    print(f"✅ 币安数据加载成功: {len(binance_pairs)} 个交易对")
+except Exception as e:
+    print(f"❌ 币安数据加载失败: {e}")
+
+# 快速统计
+print(f"\n快速统计:")
+print(f"OKX交易对: {len(data.okx())}")
+print(f"币安交易对: {len(data.binance())}")
+]]>
+      </Code>
+    </Snippet>
+  </CodeSnippet>
+
+  <!-- 实时价格监控代码片段 -->
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>实时价格监控</Title>
+      <Shortcut>monitor</Shortcut>
+      <Description>监控指定交易对价格变化</Description>
+      <Author>TradingBot</Author>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Code Language="Python">
+        <![CDATA[
+import IDE快速访问脚本 as data
+import time
+
+def monitor_price(symbol, duration=60):
+    """监控指定交易对价格变化"""
+    print(f"=== 监控 {symbol} 价格变化 ===")
+    
+    # 获取当前价格
+    all_pairs = data.search(symbol)
+    
+    for exchange, pairs in all_pairs.items():
+        print(f"\n{exchange} {symbol} 交易对:")
+        for pair in pairs:
+            price = pair.get('last_price', 'N/A')
+            change = pair.get('price_change_24h', 'N/A')
+            print(f"  - {pair['symbol']}: {price} (24h: {change})")
+
+# 监控BTC
+monitor_price("BTC")
+
+# 监控ETH
+monitor_price("ETH")
+]]>
+      </Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>

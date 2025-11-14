@@ -1,0 +1,105 @@
+{
+  "collection_info": {
+    "collection_time": "2025-10-04T04:37:20.848051",
+    "collection_duration": 2.187920570373535,
+    "api_version": "v3/sapi",
+    "total_endpoints_called": 5,
+    "data_types": [
+      "exchange_info",
+      "trading_fees",
+      "system_status",
+      "account_info_example",
+      "rate_limits"
+    ]
+  },
+  "available_data_types": [
+    "exchange_info",
+    "trading_fees",
+    "system_status",
+    "account_info_example",
+    "rate_limits",
+    "metadata"
+  ],
+  "public_endpoints": [
+    "/api/v3/exchangeInfo - 交易所信息",
+    "/api/v3/ticker/24hr - 24小时行情",
+    "/api/v3/ticker/price - 最新价格",
+    "/api/v3/ticker/bookTicker - 最优买卖价格",
+    "/api/v3/depth - 订单簿深度",
+    "/api/v3/trades - 成交记录",
+    "/api/v3/klines - K线数据",
+    "/api/v3/apiTradingStatus - API交易状态",
+    "/sapi/v1/system/status - 系统状态"
+  ],
+  "private_endpoints": [
+    "/sapi/v1/account/status - 账户状态",
+    "/sapi/v1/asset/tradeFee - 交易手续费率",
+    "/sapi/v1/capital/config/getall - 所有币种信息",
+    "/sapi/v1/capital/deposit/address - 充值地址",
+    "/sapi/v1/capital/deposit/hisrec - 充值历史",
+    "/sapi/v1/capital/withdraw/history - 提现历史",
+    "/sapi/v1/account/apiTradingStatus - API Key权限"
+  ],
+  "rate_limits": {
+    "exchange_rate_limits": [
+      {
+        "rateLimitType": "REQUEST_WEIGHT",
+        "interval": "MINUTE",
+        "intervalNum": 1,
+        "limit": 6000
+      },
+      {
+        "rateLimitType": "ORDERS",
+        "interval": "SECOND",
+        "intervalNum": 10,
+        "limit": 100
+      },
+      {
+        "rateLimitType": "ORDERS",
+        "interval": "DAY",
+        "intervalNum": 1,
+        "limit": 200000
+      },
+      {
+        "rateLimitType": "RAW_REQUESTS",
+        "interval": "MINUTE",
+        "intervalNum": 5,
+        "limit": 61000
+      }
+    ],
+    "common_limits": {
+      "request_weight_limits": [
+        {
+          "interval": "1 minute",
+          "limit": 1200
+        },
+        {
+          "interval": "1 second",
+          "limit": 10
+        }
+      ],
+      "order_limits": [
+        {
+          "interval": "10 seconds",
+          "limit": 100
+        },
+        {
+          "interval": "1 day",
+          "limit": 200000
+        }
+      ],
+      "raw_request_limits": [
+        {
+          "interval": "5 minutes",
+          "limit": 61000
+        }
+      ]
+    }
+  },
+  "usage_notes": [
+    "公共API无需身份验证",
+    "私有API需要API Key",
+    "注意请求频率限制",
+    "建议使用WebSocket获取实时数据"
+  ]
+}

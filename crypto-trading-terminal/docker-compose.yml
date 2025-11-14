@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # 后端API服务
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - API_HOST=0.0.0.0
+      - DATABASE_URL=sqlite:///./crypto_trading.db
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+    networks:
+      - crypto-network
+    
+  # Redis缓存服务
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - crypto-network
+    
+  # 监控服务 (可选)
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - crypto-network
+    profiles:
+      - monitoring
+
+volumes:
+  redis-data:
+  prometheus-data:
+
+networks:
+  crypto-network:
+    driver: bridge

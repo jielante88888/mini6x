@@ -1,0 +1,61 @@
+{
+  "api_overview": {
+    "base_url": "https://www.okx.com",
+    "api_version": "v5",
+    "authentication": "HMAC-SHA256",
+    "content_type": "application/json",
+    "encoding": "UTF-8",
+    "timestamp_format": "ISO 8601"
+  },
+  "public_endpoints": {
+    "market_data": {
+      "tickers": "/api/v5/market/tickers",
+      "orderbook": "/api/v5/market/books",
+      "trades": "/api/v5/market/trades",
+      "candles": "/api/v5/market/candles"
+    },
+    "public_info": {
+      "instruments": "/api/v5/public/instruments",
+      "trading_fee_rate": "/api/v5/public/trading-fee-rate",
+      "price_limit": "/api/v5/public/price-limit",
+      "funding_rate": "/api/v5/public/funding-rate",
+      "open_interest": "/api/v5/public/open-interest",
+      "time": "/api/v5/public/time"
+    }
+  },
+  "websocket_channels": {
+    "public_channels": {
+      "tickers": "行情频道",
+      "orderbook": "深度频道",
+      "trades": "成交频道",
+      "candles": "K线频道"
+    },
+    "private_channels": {
+      "orders": "订单频道",
+      "account": "账户频道",
+      "positions": "持仓频道"
+    }
+  },
+  "data_structures": {
+    "ticker": {
+      "instId": "交易对",
+      "last": "最新价格",
+      "ask": "卖一价",
+      "bid": "买一价",
+      "vol24h": "24小时成交量",
+      "ts": "时间戳"
+    },
+    "orderbook": {
+      "asks": "卖盘深度",
+      "bids": "买盘深度",
+      "ts": "时间戳"
+    },
+    "trade": {
+      "instId": "交易对",
+      "px": "成交价格",
+      "sz": "成交数量",
+      "side": "买卖方向",
+      "ts": "时间戳"
+    }
+  }
+}
