@@ -1,0 +1,52 @@
+{
+  "created_at": "2025-10-04T05:22:25.293827",
+  "package_version": "1.0.0",
+  "description": "OKX和币安交易所开发数据包",
+  "file_analysis": {
+    "total_files": 20,
+    "total_size": 111142647,
+    "okx_count": 6,
+    "binance_count": 4,
+    "unified_count": 1,
+    "script_count": 5,
+    "doc_count": 4
+  },
+  "files": {
+    "okx": [
+      "okx_api_documentation_20251004_041908.json",
+      "okx_api_documentation_20251004_041908_reference.json",
+      "okx_development_config_20251004_042051.json",
+      "okx_development_guide_20251004_042051.md",
+      "okx_market_data_20251004_041754.json",
+      "okx_market_data_20251004_041754_summary.json"
+    ],
+    "binance": [
+      "binance_api_documentation_20251004_043720.json",
+      "binance_api_documentation_20251004_043720_reference.json",
+      "binance_market_data_20251004_043616.json",
+      "binance_market_data_20251004_043616_summary.json"
+    ],
+    "unified": [
+      "unified_exchange_data_20251004.json"
+    ],
+    "scripts": [
+      "IDE快速访问脚本.py",
+      "IDE数据访问助手.py",
+      "quick_data_access.py",
+      "unified_data_access.py",
+      "数据获取快速启动器.py"
+    ],
+    "documentation": [
+      "IDE代码片段.xml",
+      "IDE使用说明.md",
+      "README.md",
+      "TRAE_MCP集成指南.md"
+    ]
+  },
+  "usage_guide": {
+    "quick_start": "解压后运行 IDE快速访问脚本.py 或 IDE数据访问助手.py",
+    "ide_integration": "导入IDE代码片段.xml到Visual Studio",
+    "trae_integration": "运行 TRAE_MCP配置.py 生成MCP配置",
+    "documentation": "查看 README.md 和 IDE使用说明.md"
+  }
+}

@@ -35,7 +35,7 @@ Given that feature description, do this:
    
    a. First, fetch all remote branches to ensure we have the latest information:
       ```bash
-      git fetch --all --prune
+      git fetch --all --prune 2>$null
       ```
    
    b. Find the highest feature number across all sources for the short-name:
@@ -48,7 +48,7 @@ Given that feature description, do this:
       - Find the highest number N
       - Use N+1 for the new branch number
    
-   d. Run the script `.specify/scripts/powershell/create-new-feature.ps1 -Json "{{args}}"` with the calculated number and short-name:
+   d. Run the script `.specify/scripts/powershell/create-new-feature.ps1 -Json "{{args}}"` from E:\DAIMA\mini6 with the calculated number and short-name:
       - Pass `--number N+1` and `--short-name "your-short-name"` along with the feature description
       - Bash example: `.specify/scripts/powershell/create-new-feature.ps1 -Json "{{args}}" --json --number 5 --short-name "user-auth" "Add user authentication"`
       - PowerShell example: `.specify/scripts/powershell/create-new-feature.ps1 -Json "{{args}}" -Json -Number 5 -ShortName "user-auth" "Add user authentication"`
