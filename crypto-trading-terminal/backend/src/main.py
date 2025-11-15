@@ -19,7 +19,7 @@ from prometheus_client import Counter, Histogram, generate_latest
 from .config import settings
 from .storage.database import init_database, close_database, get_db_session
 from .storage.redis_cache import init_redis, close_redis
-from .api.routes import market, trading, user, system
+from .api.routes import market, trading, user, system, order_history, risk_alerts, emergency_stop
 from .utils.logging import setup_logging
 from .utils.exceptions import (
     ExchangeConnectionError,
@@ -418,6 +418,9 @@ app.include_router(market.router, prefix="/api/v1/market", tags=["market"])
 app.include_router(trading.router, prefix="/api/v1/trading", tags=["trading"])
 app.include_router(user.router, prefix="/api/v1/user", tags=["user"])
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
+app.include_router(order_history.router, prefix="/api/v1/order-history", tags=["order-history"])
+app.include_router(risk_alerts.router, prefix="/api/v1/risk-alerts", tags=["risk-alerts"])
+app.include_router(emergency_stop.router, prefix="/api/v1/emergency-stop", tags=["emergency-stop"])
 
 
 if __name__ == "__main__":

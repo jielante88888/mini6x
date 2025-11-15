@@ -1,0 +1,106 @@
+name: Code Coverage Report
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  coverage-report:
+    name: 代码覆盖率报告
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.3'
+        channel: 'stable'
+        
+    - name: 设置Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.14'
+        
+    - name: 安装Flutter依赖并运行测试
+      run: |
+        flutter pub get
+        flutter test --no-pub --coverage --reporter=expanded
+        
+    - name: 安装Python测试依赖
+      run: |
+        pip install pytest pytest-cov coverage codecov
+        
+    - name: 运行Python测试
+      run: |
+        if exist tests (
+          python -m pytest tests/ --cov=. --cov-report=xml --cov-report=html --maxfail=3
+        ) else (
+          echo "No tests directory found, creating empty coverage"
+          mkdir -p htmlcov
+          echo "<html><body><h1>No tests directory found</h1></body></html>" > htmlcov/index.html
+        )
+        
+    - name: 安装lcov
+      run: sudo apt-get update && sudo apt-get install -y lcov
+      
+    - name: 转换Flutter覆盖率
+      run: |
+        if exist coverage/lcov.info (
+          lcov --list coverage/lcov.info || echo "No lcov data"
+        ) else (
+          echo "No Flutter coverage data found"
+        )
+        
+    - name: 上传Flutter覆盖率到Codecov
+      if: success()
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage/lcov.info
+        flags: flutter
+        name: flutter-coverage
+        fail_ci_if_error: false
+        
+    - name: 上传Python覆盖率到Codecov
+      if: success()
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.xml
+        flags: python
+        name: python-coverage
+        fail_ci_if_error: false
+        
+    - name: 生成综合覆盖率报告
+      run: |
+        echo "# 📊 代码覆盖率报告" > coverage-summary.md
+        echo "生成时间: $(date)" >> coverage-summary.md
+        echo "" >> coverage-summary.md
+        echo "## Flutter覆盖率" >> coverage-summary.md
+        if [ -f "coverage/lcov.info" ]; then
+          echo "✅ Flutter测试覆盖率已生成" >> coverage-summary.md
+        else
+          echo "⚠️ 暂无Flutter覆盖率数据" >> coverage-summary.md
+        fi
+        echo "" >> coverage-summary.md
+        echo "## Python覆盖率" >> coverage-summary.md
+        if [ -f "coverage.xml" ]; then
+          echo "✅ Python测试覆盖率已生成" >> coverage-summary.md
+        else
+          echo "⚠️ 暂无Python覆盖率数据" >> coverage-summary.md
+        fi
+        
+    - name: 上传覆盖率报告
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-reports
+        path: |
+          coverage-summary.md
+          htmlcov/
+          coverage.xml
+          coverage/lcov.info

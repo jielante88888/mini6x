@@ -7,7 +7,14 @@ from datetime import datetime, timedelta, time
 from typing import Any, Dict, List, Optional, Union, Set
 from dataclasses import dataclass
 from enum import Enum
-import pytz
+
+# 可选的时区支持
+try:
+    import pytz
+    PYTZ_AVAILABLE = True
+except ImportError:
+    PYTZ_AVAILABLE = False
+    print("Warning: pytz not available, time conditions will use UTC timezone")
 
 from .base_conditions import (
     Condition, 
@@ -96,7 +103,11 @@ class TimeCondition(Condition):
         self.include_weekends = include_weekends
         
         # 时区对象
-        self.tz = pytz.timezone(timezone.value)
+        if PYTZ_AVAILABLE:
+            self.tz = pytz.timezone(timezone.value)
+        else:
+            # 简单的时区处理
+            self.tz = datetime.timezone.utc
         
         # 数据存储
         self.time_history: List[datetime] = []
@@ -745,7 +756,10 @@ class TimeCondition(Condition):
         self.include_weekends = data.get("include_weekends", True)
         
         # 重建时区对象
-        self.tz = pytz.timezone(self.timezone.value)
+        if PYTZ_AVAILABLE:
+            self.tz = pytz.timezone(self.timezone.value)
+        else:
+            self.tz = datetime.timezone.utc
         
         # 重建时间历史
         time_history_strs = data.get("time_history", [])

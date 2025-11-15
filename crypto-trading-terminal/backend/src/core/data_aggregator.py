@@ -15,11 +15,11 @@ import structlog
 
 from ..adapters.base import (
     BaseExchangeAdapter, MarketData, OrderBook, Trade, ExchangeAdapterFactory,
-    MarketType, Exchange
+    MarketType, ExchangeInfo
 )
 from ..storage.redis_cache import get_market_cache, MarketDataCache
 from ..storage.models import MarketData as MarketDataModel
-from ..utils.exceptions import DataAggregationError, ExchangeConnectionError
+from ..utils.exceptions import MarketDataError, ExchangeConnectionError
 
 logger = structlog.get_logger(__name__)
 
@@ -61,7 +61,7 @@ class DataAggregator:
             
         except Exception as e:
             logger.error(f"数据聚合器初始化失败: {e}")
-            raise DataAggregationError(f"初始化失败: {e}")
+            raise MarketDataError(f"初始化失败: {e}")
     
     async def _initialize_adapters(self) -> None:
         """初始化交易所适配器"""
@@ -102,7 +102,7 @@ class DataAggregator:
         available_connections = [k for k, v in connection_results.items() if v]
         
         if not available_connections:
-            raise DataAggregationError("没有可用的交易所连接")
+            raise MarketDataError("没有可用的交易所连接")
         
         logger.info(f"可用交易所连接: {available_connections}")
     
@@ -121,7 +121,7 @@ class DataAggregator:
             
             # 从适配器获取数据
             if exchange_key not in self.adapters:
-                raise DataAggregationError(f"不支持的交易所: {exchange_key}")
+                raise MarketDataError(f"不支持的交易所: {exchange_key}")
             
             adapter = self.adapters[exchange_key]
             
@@ -130,7 +130,7 @@ class DataAggregator:
             elif market_type.lower() == "futures":
                 data = await adapter.get_futures_ticker(symbol)
             else:
-                raise DataAggregationError(f"不支持的市场类型: {market_type}")
+                raise MarketDataError(f"不支持的市场类型: {market_type}")
             
             # 缓存数据
             self.data_cache[cache_key] = data
@@ -146,7 +146,7 @@ class DataAggregator:
             
         except Exception as e:
             logger.error(f"获取市场数据失败 {exchange}:{market_type}:{symbol}: {e}")
-            raise DataAggregationError(f"数据获取失败: {e}")
+            raise MarketDataError(f"数据获取失败: {e}")
     
     async def get_multiple_market_data(
         self, 
@@ -462,7 +462,7 @@ class FuturesDataAggregator:
             # 获取适配器
             exchange_key = f"{exchange}_futures"
             if exchange_key not in self.main_aggregator.adapters:
-                raise DataAggregationError(f"不支持的期货交易所: {exchange_key}")
+                raise MarketDataError(f"不支持的期货交易所: {exchange_key}")
             
             adapter = self.main_aggregator.adapters[exchange_key]
             
@@ -494,7 +494,7 @@ class FuturesDataAggregator:
             # 获取适配器
             exchange_key = f"{exchange}_futures"
             if exchange_key not in self.main_aggregator.adapters:
-                raise DataAggregationError(f"不支持的期货交易所: {exchange_key}")
+                raise MarketDataError(f"不支持的期货交易所: {exchange_key}")
             
             adapter = self.main_aggregator.adapters[exchange_key]
             
@@ -655,7 +655,7 @@ class FuturesDataAggregator:
             
         except Exception as e:
             logger.error(f"获取期货摘要失败 {exchange}: {e}")
-            raise DataAggregationError(f"期货摘要获取失败: {e}")
+            raise MarketDataError(f"期货摘要获取失败: {e}")
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """获取缓存统计信息"""

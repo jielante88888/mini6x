@@ -6,6 +6,7 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
 from dataclasses import dataclass
+from enum import Enum
 import statistics
 
 from .base_conditions import (
