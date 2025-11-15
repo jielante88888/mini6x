@@ -1,17 +1,9 @@
-# 忽略所有文件和目录
+# 忽略根目录下的所有文件
 *
 
-# 保留 crypto-trading-terminal 目录
-!crypto-trading-terminal/
-
-# 允许.gitignore文件本身
+# 但不忽略git相关文件和目录
 !.gitignore
-
-# 保留必要的Git文件
 !.gitattributes
-!LICENSE
-!README.md
 
-# 保留crypto-trading-terminal下的所有内容
-crypto-trading-terminal/**
+# 只跟踪crypto-trading-terminal目录
 !crypto-trading-terminal/
