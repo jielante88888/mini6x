@@ -1,0 +1,100 @@
+name: crypto_trading_terminal
+description: 加密货币专业交易终端系统 - Windows桌面应用
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.1.0 <4.0.0'
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # UI框架和设计
+  cupertino_icons: ^1.0.6
+  material_design_icons_flutter: ^7.0.7296
+  flutter_slidable: ^3.0.1
+  
+  # 状态管理
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  
+  # 网络和API
+  http: ^1.1.2
+  web_socket_channel: ^2.4.0
+  dio: ^5.4.0
+  chopper: ^6.1.2
+  
+  # 数据处理
+  json_annotation: ^4.8.1
+  json_serializable: ^6.7.1
+  
+  # 实时更新
+  web_socket_stream: ^1.0.1
+  socket_io_client: ^2.0.3+1
+  
+  # 图表和可视化
+  fl_chart: ^0.66.0
+  syncfusion_flutter_charts: ^23.2.7
+  syncfusion_flutter_gauges: ^23.2.7
+  
+  # 存储和缓存
+  shared_preferences: ^2.2.2
+  sqflite: ^2.3.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  
+  # 通知和提醒
+  flutter_local_notifications: ^16.3.2
+  permission_handler: ^11.1.0
+  
+  # 工具库
+  intl: ^0.18.1
+  uuid: ^4.2.1
+  crypto: ^3.0.3
+  
+  # 系统集成
+  window_manager: ^0.3.7
+  system_tray: ^2.0.3
+  auto_start: ^0.3.1
+  
+  # 开发工具
+  logger: ^2.0.2+1
+  path_provider: ^2.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  # 代码生成
+  build_runner: ^2.4.7
+  riverpod_generator: ^2.3.9
+  chopper_generator: ^6.1.2
+  json_serializable: ^6.7.1
+  hive_generator: ^2.0.1
+  
+  # 代码质量
+  flutter_lints: ^3.0.0
+  very_good_analysis: ^5.1.0
+  
+  # 测试
+  mockito: ^5.4.3
+  mock_web_server: ^6.0.0
+  bloc_test: ^9.1.5
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/fonts/
+  
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
