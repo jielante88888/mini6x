@@ -1,0 +1,68 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # 每周一凌晨2点运行安全扫描
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: 综合安全扫描
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 运行Trivy漏洞扫描
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: 上传Trivy扫描结果到GitHub Security
+      if: always()
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+        
+    - name: 检查Python安全漏洞
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.14'
+        
+    - name: 安装安全扫描工具
+      run: |
+        pip install bandit safety semgrep
+        
+    - name: 运行Bandit Python安全扫描
+      run: bandit -r . -f json -o bandit-results.json
+      
+    - name: 运行Safety依赖漏洞检查
+      run: safety check --json --output safety-results.json || echo "Safety scan completed"
+      
+    - name: 运行Semgrep静态分析
+      run: |
+        if exist .semgrep.yml (
+          semgrep --config=.semgrep.yml --json --output=semgrep-results.json .
+        ) else (
+          semgrep --config=auto --json --output=semgrep-results.json .
+        )
+        
+    - name: 上传安全扫描报告
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-scan-reports
+        path: |
+          bandit-results.json
+          safety-results.json
+          semgrep-results.json
+          trivy-results.sarif

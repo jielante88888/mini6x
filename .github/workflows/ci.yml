@@ -128,7 +128,7 @@ jobs:
     # 上传质量报告
     - name: 上传代码质量报告
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: code-quality-reports
         path: |
@@ -196,7 +196,7 @@ jobs:
         
     - name: 上传Flutter构建产物
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: flutter-build-reports
         path: |
@@ -280,7 +280,7 @@ jobs:
         
     - name: 上传Python测试报告
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: python-test-reports
         path: |
@@ -350,7 +350,7 @@ jobs:
         
     - name: 上传安全报告
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: security-reports
         path: |
@@ -421,7 +421,7 @@ jobs:
         
     - name: 上传依赖检查报告
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: dependency-reports
         path: |
@@ -472,7 +472,7 @@ jobs:
         
     - name: 上传Docker镜像信息
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: docker-build-info
         path: |
@@ -569,7 +569,7 @@ jobs:
         
     - name: 上传API测试报告
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: exchange-api-test-report
         path: tests/api/
