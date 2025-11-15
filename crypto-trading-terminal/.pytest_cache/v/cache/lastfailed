@@ -1,0 +1,22 @@
+{
+  "tests/integration/test_binance_spot.py": true,
+  "tests/performance/test_condition_evaluation.py": true,
+  "tests/integration/test_notification_templates.py::TestTemplateEngine": true,
+  "tests/integration/test_notification_templates.py::TestTemplateManager": true,
+  "tests/integration/test_notification_templates.py::TestPrebuiltTemplates": true,
+  "tests/integration/test_notification_templates.py::TestChannelTemplates": true,
+  "tests/integration/test_notification_templates.py::TestTemplateIntegration": true,
+  "tests/integration/test_notification_templates.py::TestTemplateEngine::test_render_python_template_with_formatters": true,
+  "tests/integration/test_notification_templates.py::TestTemplateEngine::test_render_trigger_event": true,
+  "tests/integration/test_notification_templates.py::TestPrebuiltTemplates::test_template_variables_coverage": true,
+  "tests/integration/test_notification_templates.py::TestChannelTemplates::test_telegram_templates_structure": true,
+  "tests/integration/test_notification_templates.py::TestTemplateIntegration::test_full_template_workflow": true,
+  "tests/integration/test_notification_templates.py::TestTemplateIntegration::test_formatter_chaining": true,
+  "tests/integration/test_notification_templates.py::TestTemplateIntegration::test_template_performance": true,
+  "tests/contract/test_spot_strategies.py::TestSpotStrategyContract::test_strategy_manager_contract": true,
+  "tests/contract/test_spot_strategies.py::TestSpotStrategyContract::test_martingale_risk_limit_contract": true,
+  "tests/contract/test_spot_strategies.py::TestSpotStrategyContract::test_strategy_performance_tracking_contract": true,
+  "tests/contract/test_spot_strategies.py::TestSpotStrategyContract::test_strategy_error_handling_contract": true,
+  "tests/integration/test_strategy_performance.py": true,
+  "test_grid_strategy.py": true
+}
