@@ -578,7 +578,7 @@ jobs:
   build-summary:
     name: 构建状态汇总
     runs-on: ubuntu-latest
-    needs: [code-quality, flutter-build, python-tests, security-check, dependency-check]
+    needs: [code-quality, flutter-build, python-build, security-check, dependency-check]
     if: always()
     
     steps:
@@ -588,14 +588,14 @@ jobs:
         echo "========================"
         echo "✅ 代码质量检查: ${{ needs.code-quality.result }}"
         echo "🔨 Flutter构建测试: ${{ needs.flutter-build.result }}"
-        echo "🐍 Python模块测试: ${{ needs.python-tests.result }}"
+        echo "🐍 Python模块测试: ${{ needs.python-build.result }}"
         echo "🔒 安全检查: ${{ needs.security-check.result }}"
         echo "📦 依赖检查: ${{ needs.dependency-check.result }}"
         echo "========================"
         
         if [[ "${{ needs.code-quality.result }}" == "success" && 
               "${{ needs.flutter-build.result }}" == "success" && 
-              "${{ needs.python-tests.result }}" == "success" ]]; then
+              "${{ needs.python-build.result }}" == "success" ]]; then
           echo "🎉 CI Pipeline PASSED - 所有核心检查通过"
           exit 0
         else
