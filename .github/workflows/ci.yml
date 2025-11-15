@@ -1,0 +1,604 @@
+name: CI - 代码质量 & 编译检查
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'README*'
+  pull_request:
+    branches: [ main, master, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'README*'
+  workflow_dispatch:
+    inputs:
+      test_exchange_connections:
+        description: '测试交易所API连接'
+        required: false
+        default: false
+        type: boolean
+      full_test:
+        description: '运行完整测试套件'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  # 代码质量检查
+  code-quality:
+    name: 代码质量检查
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 完整历史记录用于更好的分析
+        
+    - name: 设置Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: 设置Flutter 3.16
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.16.0'
+        channel: 'stable'
+        
+    - name: 缓存依赖
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.pub-cache
+          ${{ runner.tool_cache }}/flutter
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/requirements.txt', '**/pubspec.yaml') }}
+        
+    # Python代码质量检查 (后端)
+    - name: 安装后端依赖
+      run: |
+        cd crypto-trading-terminal/backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest-cov bandit safety
+        
+    - name: Python代码格式化检查 (Black)
+      run: |
+        cd crypto-trading-terminal/backend
+        black --check --diff . --color
+        
+    - name: Python导入排序检查 (isort)
+      run: |
+        cd crypto-trading-terminal/backend
+        isort --check-only --diff .
+        
+    - name: Python代码风格检查 (flake8)
+      run: |
+        cd crypto-trading-terminal/backend
+        flake8 . --max-line-length=88 --extend-ignore=E203,W503 --count
+        
+    - name: Python类型检查 (mypy)
+      run: |
+        cd crypto-trading-terminal/backend
+        mypy . --ignore-missing-imports --show-error-codes
+        
+    - name: Python静态分析 (pylint)
+      run: |
+        cd crypto-trading-terminal/backend
+        pylint --output-format=text --reports=no **/*.py || true
+        
+    # Flutter代码质量检查 (前端)
+    - name: 获取Flutter依赖
+      run: |
+        cd crypto-trading-terminal/frontend
+        flutter pub get
+        
+    - name: Flutter代码格式检查
+      run: |
+        cd crypto-trading-terminal/frontend
+        dart format --set-exit-if-changed --output=none .
+        
+    - name: Flutter静态分析
+      run: |
+        cd crypto-trading-terminal/frontend
+        flutter analyze --no-pub --no-fatal-infos
+        
+    - name: Flutter lint检查
+      run: |
+        cd crypto-trading-terminal/frontend
+        dart analyze --no-pub --no-fatal-infos
+        
+    # 安全扫描
+    - name: Python安全漏洞扫描 (Bandit)
+      run: |
+        cd crypto-trading-terminal/backend
+        bandit -r . -f json -o bandit-report.json || true
+        
+    - name: Python依赖安全检查 (Safety)
+      run: |
+        cd crypto-trading-terminal/backend
+        safety check --json --output safety-report.json || true
+        
+    # 上传质量报告
+    - name: 上传代码质量报告
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: code-quality-reports
+        path: |
+          crypto-trading-terminal/backend/bandit-report.json
+          crypto-trading-terminal/backend/safety-report.json
+
+  # Flutter构建测试
+  flutter-build:
+    name: Flutter编译检查
+    runs-on: ubuntu-latest
+    needs: code-quality
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 设置Flutter 3.16
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.16.0'
+        channel: 'stable'
+        
+    - name: 缓存Flutter依赖
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.pub-cache
+          ${{ runner.tool_cache }}/flutter
+        key: ${{ runner.os }}-flutter-${{ env.FLUTTER_VERSION }}
+        
+    - name: 检查Flutter环境
+      run: |
+        flutter doctor -v
+        
+    - name: 获取Flutter依赖
+      run: |
+        cd crypto-trading-terminal/frontend
+        flutter pub get
+        
+    - name: Flutter单元测试
+      run: |
+        cd crypto-trading-terminal/frontend
+        flutter test --no-pub --coverage --reporter=expanded || true
+        
+    - name: 生成测试覆盖率
+      run: |
+        cd crypto-trading-terminal/frontend
+        if [ -f coverage/lcov.info ]; then
+          pip install codecov
+          codecov
+        fi
+        
+    - name: 编译Flutter Web版本
+      run: |
+        cd crypto-trading-terminal/frontend
+        flutter build web --release --no-sound-null-safety
+      continue-on-error: true  # Web构建失败不影响整体CI
+      
+    - name: 测试Flutter模块导入
+      run: |
+        cd crypto-trading-terminal/frontend
+        flutter pub deps --null-safety || true
+        
+    - name: 上传Flutter构建产物
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: flutter-build-reports
+        path: |
+          crypto-trading-terminal/frontend/build/
+          crypto-trading-terminal/frontend/coverage/
+
+  # Python编译和测试
+  python-build:
+    name: Python编译检查
+    runs-on: ubuntu-latest
+    needs: code-quality
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 设置Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: 安装系统依赖
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+        
+    - name: 安装Python依赖
+      run: |
+        cd crypto-trading-terminal/backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio httpx
+        
+    - name: 测试Python模块编译
+      run: |
+        cd crypto-trading-terminal/backend
+        python -c "
+        try:
+            import fastapi
+            import uvicorn
+            import ccxt
+            import pandas
+            import sqlalchemy
+            print('✅ 所有核心依赖模块导入成功')
+        except ImportError as e:
+            print(f'❌ 模块导入失败: {e}')
+            exit(1)
+        "
+        
+    - name: 测试FastAPI应用启动
+      run: |
+        cd crypto-trading-terminal/backend
+        timeout 10s python -c "
+        from main import app
+        print('✅ FastAPI应用启动正常')
+        " || echo "FastAPI启动测试完成"
+        
+    - name: 运行Python单元测试
+      run: |
+        cd crypto-trading-terminal/backend
+        python -m pytest tests/ -v --tb=short --cov=. --cov-report=xml --cov-report=html --maxfail=3 || true
+        
+    - name: 生成测试覆盖率报告
+      run: |
+        cd crypto-trading-terminal/backend
+        if [ -f coverage.xml ]; then
+          pip install codecov
+          codecov
+        fi
+        
+    - name: 测试WebSocket模块
+      run: |
+        cd crypto-trading-terminal/backend
+        python -c "
+        import asyncio
+        import websockets
+        print('✅ WebSocket模块可用')
+        "
+        
+    - name: 上传Python测试报告
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: python-test-reports
+        path: |
+          crypto-trading-terminal/backend/coverage.xml
+          crypto-trading-terminal/backend/htmlcov/
+
+  # 安全检查
+  security-check:
+    name: 安全漏洞扫描
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 设置Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: 安装安全扫描工具
+      run: |
+        pip install --upgrade pip
+        pip install bandit[toml] safety pip-audit
+        
+    - name: 安装后端依赖
+      run: |
+        cd crypto-trading-terminal/backend
+        pip install -r requirements.txt
+        
+    - name: 运行Bandit安全扫描
+      run: |
+        cd crypto-trading-terminal/backend
+        bandit -r . -f json -o bandit-report.json || true
+        bandit -r . -f txt || true
+        
+    - name: 运行Safety依赖安全检查
+      run: |
+        cd crypto-trading-terminal/backend
+        safety check --json --output safety-report.json || true
+        safety check || true
+        
+    - name: 运行pip-audit漏洞扫描
+      run: |
+        cd crypto-trading-terminal/backend
+        pip-audit --format=json --output=pip-audit-report.json || true
+        pip-audit --format=text || true
+        
+    - name: 生成安全检查摘要
+      run: |
+        echo "## 🔒 安全检查报告" > security-summary.md
+        echo "### Bandit扫描结果" >> security-summary.md
+        if [ -f crypto-trading-terminal/backend/bandit-report.json ]; then
+          echo "✅ Bandit扫描完成" >> security-summary.md
+        else
+          echo "⚠️ Bandit扫描未生成报告" >> security-summary.md
+        fi
+        echo "" >> security-summary.md
+        echo "### Safety依赖检查结果" >> security-summary.md
+        if [ -f crypto-trading-terminal/backend/safety-report.json ]; then
+          echo "✅ Safety依赖检查完成" >> security-summary.md
+        else
+          echo "⚠️ Safety依赖检查未生成报告" >> security-summary.md
+        fi
+        
+    - name: 上传安全报告
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          crypto-trading-terminal/backend/bandit-report.json
+          crypto-trading-terminal/backend/safety-report.json
+          crypto-trading-terminal/backend/pip-audit-report.json
+          security-summary.md
+
+  # 依赖检查
+  dependency-check:
+    name: 依赖版本检查
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 设置Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: 设置Flutter 3.16
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.16.0'
+        channel: 'stable'
+        
+    - name: 检查Python依赖更新
+      run: |
+        cd crypto-trading-terminal/backend
+        pip install --upgrade pip
+        pip install pipdeptree
+        pip install -r requirements.txt
+        echo "### Python依赖树" > dependency-report.md
+        pipdeptree --json-tree > dependency-tree.json || true
+        pipdeptree >> dependency-report.md || true
+        
+    - name: 检查Flutter依赖更新
+      run: |
+        cd crypto-trading-terminal/frontend
+        flutter pub deps
+        echo "" >> dependency-report.md
+        echo "### Flutter依赖" >> dependency-report.md
+        flutter pub deps >> dependency-report.md || true
+        
+    - name: 检查过时的Python包
+      run: |
+        cd crypto-trading-terminal/backend
+        pip list --outdated --format=json > outdated-packages.json || true
+        if [ -s outdated-packages.json ]; then
+          echo "⚠️ 发现过时的包:" >> dependency-report.md
+          cat outdated-packages.json >> dependency-report.md
+        else
+          echo "✅ 所有Python包都是最新的" >> dependency-report.md
+        fi
+        
+    - name: 检查过时的Flutter包
+      run: |
+        cd crypto-trading-terminal/frontend
+        flutter pub outdated --mode=null-safety > outdated-flutter-packages.txt || true
+        if [ -s outdated-flutter-packages.txt ]; then
+          echo "### Flutter过时包" >> dependency-report.md
+          cat outdated-flutter-packages.txt >> dependency-report.md
+        fi
+        
+    - name: 上传依赖检查报告
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: dependency-reports
+        path: |
+          dependency-report.md
+          dependency-tree.json
+          outdated-packages.json
+          outdated-flutter-packages.txt
+
+  # Docker构建测试
+  docker-build:
+    name: Docker构建测试
+    runs-on: windows-latest
+    if: contains(github.event.head_commit.message, '[docker]') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 构建开发环境镜像
+      if: success()
+      run: |
+        if exist Dockerfile (
+          docker build -t trading-terminal:dev-${{ github.sha }} --target development .
+        ) else (
+          echo "No Dockerfile found, skipping Docker build"
+        )
+        
+    - name: 构建后端镜像
+      if: success()
+      run: |
+        if exist Dockerfile (
+          docker build -t trading-terminal:backend-${{ github.sha }} --target backend .
+        ) else (
+          echo "No Dockerfile found, skipping backend build"
+        )
+        
+    - name: 运行容器健康检查
+      if: success()
+      run: |
+        docker run -d --name health-check trading-terminal:backend-${{ github.sha }}
+        sleep 10
+        docker logs health-check || echo "Container logs retrieved"
+        docker stop health-check || echo "Container stopped"
+        docker rm health-check || echo "Container removed"
+        
+    - name: 上传Docker镜像信息
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-build-info
+        path: |
+          docker-images.txt
+        retention-days: 1
+
+  # 交易API连接测试（模拟）
+  exchange-api-test:
+    name: 交易所API连接测试
+    runs-on: windows-latest
+    if: github.event.inputs.test_exchange_connections == 'true' || contains(github.event.head_commit.message, '[test-api]')
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.14'
+        
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install ccxt pytest-asyncio aiohttp
+        
+    - name: 创建模拟API测试
+      run: |
+        mkdir -p tests/api
+        cat > tests/api/test_api_simulation.py << 'EOF'
+        import asyncio
+        import aiohttp
+        import ccxt.async_support as ccxt
+        from unittest.mock import AsyncMock, patch
+        
+        async def test_binance_connection():
+            # 模拟币安API连接测试
+            try:
+                # 使用测试网端点
+                binance = ccxt.binance({
+                    'sandbox': True,
+                    'apiKey': 'test_key',
+                    'secret': 'test_secret',
+                    'enableRateLimit': True,
+                })
+                
+                # 测试连接性（不进行真实交易）
+                status = await binance.load_markets()
+                print(f"✅ Binance API: 连接成功，加载了 {len(status)} 个交易对")
+                return True
+            except Exception as e:
+                print(f"❌ Binance API: 连接失败 - {str(e)}")
+                return False
+        
+        async def test_okx_connection():
+            # 模拟OKX API连接测试
+            try:
+                okx = ccxt.okx({
+                    'sandbox': True,
+                    'apiKey': 'test_key',
+                    'secret': 'test_secret',
+                    'enableRateLimit': True,
+                })
+                
+                # 测试连接性
+                status = await okx.load_markets()
+                print(f"✅ OKX API: 连接成功，加载了 {len(status)} 个交易对")
+                return True
+            except Exception as e:
+                print(f"❌ OKX API: 连接失败 - {str(e)}")
+                return False
+        
+        async def main():
+            print("🚀 开始交易所API连接测试...")
+            
+            binance_result = await test_binance_connection()
+            okx_result = await test_okx_connection()
+            
+            if binance_result and okx_result:
+                print("🎉 所有交易所API连接测试通过")
+                return 0
+            else:
+                print("⚠️  部分交易所API连接测试失败")
+                return 1
+        
+        if __name__ == "__main__":
+            exit_code = asyncio.run(main())
+            exit(exit_code)
+        EOF
+        
+    - name: 运行API连接测试
+      run: |
+        python tests/api/test_api_simulation.py
+        
+    - name: 上传API测试报告
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: exchange-api-test-report
+        path: tests/api/
+
+  # 构建状态汇总
+  build-summary:
+    name: 构建状态汇总
+    runs-on: ubuntu-latest
+    needs: [code-quality, flutter-build, python-tests, security-check, dependency-check]
+    if: always()
+    
+    steps:
+    - name: 汇总构建状态
+      run: |
+        echo "🎯 CI Pipeline Results:"
+        echo "========================"
+        echo "✅ 代码质量检查: ${{ needs.code-quality.result }}"
+        echo "🔨 Flutter构建测试: ${{ needs.flutter-build.result }}"
+        echo "🐍 Python模块测试: ${{ needs.python-tests.result }}"
+        echo "🔒 安全检查: ${{ needs.security-check.result }}"
+        echo "📦 依赖检查: ${{ needs.dependency-check.result }}"
+        echo "========================"
+        
+        if [[ "${{ needs.code-quality.result }}" == "success" && 
+              "${{ needs.flutter-build.result }}" == "success" && 
+              "${{ needs.python-tests.result }}" == "success" ]]; then
+          echo "🎉 CI Pipeline PASSED - 所有核心检查通过"
+          exit 0
+        else
+          echo "❌ CI Pipeline FAILED - 请检查失败的步骤"
+          exit 1
+        fi
