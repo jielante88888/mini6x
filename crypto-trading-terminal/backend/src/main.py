@@ -19,7 +19,7 @@ from prometheus_client import Counter, Histogram, generate_latest
 from .config import settings
 from .storage.database import init_database, close_database, get_db_session
 from .storage.redis_cache import init_redis, close_redis
-from .api.routes import market, trading, user, system, order_history, risk_alerts, emergency_stop
+from .api.routes import market, trading, user, system, order_history, risk_alerts, emergency_stop, reports
 from .utils.logging import setup_logging
 from .utils.exceptions import (
     ExchangeConnectionError,
@@ -147,6 +147,10 @@ app = FastAPI(
         {
             "name": "system",
             "description": "系统API - 监控和系统状态"
+        },
+        {
+            "name": "reports",
+            "description": "报表API - PDF/CSV报告生成和下载"
         }
     ]
 )
@@ -421,6 +425,7 @@ app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
 app.include_router(order_history.router, prefix="/api/v1/order-history", tags=["order-history"])
 app.include_router(risk_alerts.router, prefix="/api/v1/risk-alerts", tags=["risk-alerts"])
 app.include_router(emergency_stop.router, prefix="/api/v1/emergency-stop", tags=["emergency-stop"])
+app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 
 
 if __name__ == "__main__":
