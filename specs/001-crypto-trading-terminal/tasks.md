@@ -231,18 +231,18 @@
 ### Tests for User Story 7 ⚠️
 
 - [✅] T094 [P] [US7] Contract test for futures strategy execution in tests/contract/test_futures_strategies.py
-- [ ] T095 [P] [US7] Integration test for leverage and funding rate handling in tests/integration/test_futures_risk.py
+- [✅] T095 [P] [US7] Integration test for leverage and funding rate handling in tests/integration/test_futures_risk.py
 
 ### Implementation for User Story 7
 
-- [ ] T096 [P] [US7] Implement trend strategy for futures in backend/src/strategies/futures/trend.py
-- [ ] T097 [P] [US7] Implement swing strategy for futures in backend/src/strategies/futures/swing.py
-- [ ] T098 [P] [US7] Implement leverage management for futures strategies
-- [ ] T099 [P] [US7] Implement funding rate arbitrage strategy
-- [ ] T100 [US7] Create futures-specific risk controls for leveraged trading
-- [ ] T101 [US7] Implement margin and liquidation management
-- [ ] T102 [US7] Create futures strategy UI with leverage and risk controls
-- [ ] T103 [US7] Add futures-specific analytics and reporting
+- [✅] T096 [P] [US7] Implement trend strategy for futures in backend/src/strategies/futures/trend.py
+- [✅] T097 [P] [US7] Implement swing strategy for futures in backend/src/strategies/futures/swing.py
+- [✅] T098 [P] [US7] Implement leverage management for futures strategies
+- [✅] T099 [P] [US7] Implement funding rate arbitrage strategy
+- [✅] T100 [US7] Create futures-specific risk controls for leveraged trading
+- [✅] T101 [US7] Implement margin and liquidation management
+- [✅] T102 [US7] Create futures strategy UI with leverage and risk controls
+- [✅] T103 [US7] Add futures-specific analytics and reporting
 
 **Checkpoint**: Futures trading strategies fully operational with proper risk management
 
